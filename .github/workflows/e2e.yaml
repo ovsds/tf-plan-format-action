@@ -13,6 +13,46 @@ concurrency:
 
 jobs:
   e2e-default:
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          files: tests/plans/create/opentofu.tfplan.json
+          comment: false
+
+      - name: Assert rendered markdown
+        shell: bash
+        env:
+          MARKDOWN_PATH: ${{ steps.test-run.outputs.markdown-path }}
+          COMMENT_ID: ${{ steps.test-run.outputs.comment-id }}
+        run: |
+          cat "${MARKDOWN_PATH}"
+          [[ "$(sed -n 1p "${MARKDOWN_PATH}")" == "<!-- tf-plan-format-action:default -->" ]]
+          [[ "$(sed -n 2p "${MARKDOWN_PATH}")" == "## Plan" ]]
+          grep -qF "terraform_data.foo-bar" "${MARKDOWN_PATH}"
+          grep -qF "create - Plan: 1 to add, 0 to change, 0 to destroy" "${MARKDOWN_PATH}"
+          [[ -z "${COMMENT_ID}" ]]
+
+  e2e-multiple-plans:
     runs-on: ubuntu-latest
 
     permissions:
@@ -28,13 +68,30 @@ jobs:
         id: test-run
         uses: $/
         with:
-          placeholder: "test_placeholder"
+          files: |
+            tests/plans/create/opentofu.tfplan.json
+            tests/plans/u*/opentofu.tfplan.json
+            tests/plans/outputs/opentofu.tfplan.json
+          version: "0.1.0"
+          changed-values: true
+          title: "Staging plan"
+          comment: false
+          comment-key: "staging"
 
-      - name: Assert placeholder
-        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
-        with:
-          actual: ${{ steps.test-run.outputs.placeholder }}
-          expected: "test_placeholder"
+      - name: Assert rendered markdown
+        shell: bash
+        env:
+          MARKDOWN_PATH: ${{ steps.test-run.outputs.markdown-path }}
+        run: |
+          cat "${MARKDOWN_PATH}"
+          [[ "$(sed -n 1p "${MARKDOWN_PATH}")" == "<!-- tf-plan-format-action:staging -->" ]]
+          [[ "$(sed -n 2p "${MARKDOWN_PATH}")" == "## Staging plan" ]]
+          grep -qF "terraform_data.foo-bar" "${MARKDOWN_PATH}"
+          grep -qF "create - Plan: 1 to add, 0 to change, 0 to destroy" "${MARKDOWN_PATH}"
+          grep -qF "update - Plan: 0 to add, 1 to change, 0 to destroy" "${MARKDOWN_PATH}"
+          grep -qF "outputs - Plan: 0 to add, 1 to change, 0 to destroy" "${MARKDOWN_PATH}"
+          grep -qF "Outputs" "${MARKDOWN_PATH}"
+
   e2e:
     runs-on: ubuntu-latest
     if: always() && !cancelled()
@@ -43,6 +100,7 @@ jobs:
 
     needs:
       - e2e-default
+      - e2e-multiple-plans
 
     steps:
       - name: Collect Results

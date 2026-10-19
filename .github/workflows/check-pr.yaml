@@ -37,3 +37,7 @@ jobs:
           mise run lint
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Required for Zizmor
+
+      - name: Test PR
+        run: |
+          mise run test

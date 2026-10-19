@@ -52,6 +52,13 @@ run = [
   "gitleaks git --log-opts=HEAD --redact --no-banner",
 ]
 
+[tasks.test]
+description = "Test project, with TF_PLAN_FORMAT_ACTION_TEST_BINARY set to a tf_plan_format binary also render the plan fixtures"
+run = [
+  "echo 'Running tests...'",
+  "tests/main.test.sh",
+]
+
 [tasks.clean]
 description = "Clean project environment"
 run = [
