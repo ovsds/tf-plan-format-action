@@ -3,7 +3,7 @@
 [![CI](https://github.com/ovsds/tf-plan-format-action/workflows/Check%20PR/badge.svg)](https://github.com/ovsds/tf-plan-format-action/actions?query=workflow%3A%22%22Check+PR%22%22)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-TF%20Plan%20Format-blue.svg)](https://github.com/marketplace/actions/tf-plan-format)
 
-Renders Terraform and OpenTofu plans into GitHub markdown with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and returns it, as the `rendered-plan` output or a file.
+Renders Terraform and OpenTofu plans into GitHub markdown with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and returns it, both as the `rendered-plan` output and as a file at `rendered-plan-path`.
 
 The action is a thin layer over the `tf_plan_format` binary: it downloads the `version` release for the runner (Linux or macOS, X64 or ARM64), verifies its SHA-256 checksum, unpacks it into `$RUNNER_TEMP` and runs `tf_plan_format github` with a `--file` for each of the plan files. It posts nothing: where the markdown goes is the caller's choice.
 
@@ -41,20 +41,22 @@ jobs:
           tofu show -json "${RUNNER_TEMP}/plan.tfplan" > "${RUNNER_TEMP}/plan.json"
 
       - name: TF Plan Format
+        id: tf-plan-format
         uses: ovsds/tf-plan-format-action@v1
         with:
           plan-files: ${{ runner.temp }}/plan.json
-          rendered-plan-path: ${{ runner.temp }}/plan.md
 
       # The comment to update is found by this marker
       - name: Add comment marker
-        run: sed -i '1i <!-- tf-plan-format -->' "${RUNNER_TEMP}/plan.md"
+        run: sed -i '1i <!-- tf-plan-format -->' "${RENDERED_PLAN_PATH}"
+        env:
+          RENDERED_PLAN_PATH: ${{ steps.tf-plan-format.outputs.rendered-plan-path }}
 
       - name: Comment
         uses: ovsds/create-or-update-unique-comment-action@v1
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body-path: ${{ runner.temp }}/plan.md
+          body-path: ${{ steps.tf-plan-format.outputs.rendered-plan-path }}
           unique-body-includes: "<!-- tf-plan-format -->"
 ```
 
@@ -74,7 +76,7 @@ Plan files are separated by newlines, or by `plan-files-separator`, and may be g
     RENDERED_PLAN: ${{ steps.tf-plan-format.outputs.rendered-plan }}
 ```
 
-Large plans are better written to a file with `rendered-plan-path` than passed through the `rendered-plan` output. The rendered plan is not capped, while GitHub comments stop at 65536 characters.
+Large plans are better read from the `rendered-plan-path` file than passed on through the `rendered-plan` output. The rendered plan is not capped, while GitHub comments stop at 65536 characters.
 
 ### Security
 
@@ -104,11 +106,6 @@ inputs:
       tf-plan-format version, a release tag like 0.1.0
     required: true
     default: "0.1.0"
-
-  rendered-plan-path:
-    description: |
-      Path to write the rendered plan to instead of the `rendered-plan` output
-    required: false
 ```
 
 ### Action Outputs
@@ -117,8 +114,13 @@ inputs:
 outputs:
   rendered-plan:
     description: |
-      Rendered plan in GitHub markdown, empty when `rendered-plan-path` is set
+      Rendered plan in GitHub markdown
     value: ${{ steps.run.outputs.rendered-plan }}
+
+  rendered-plan-path:
+    description: |
+      Path of a file in `$RUNNER_TEMP` holding the rendered plan
+    value: ${{ steps.run.outputs.rendered-plan-path }}
 ```
 
 ## Development

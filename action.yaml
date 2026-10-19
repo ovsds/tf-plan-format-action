@@ -25,16 +25,16 @@ inputs:
     required: true
     default: "0.1.0"
 
-  rendered-plan-path:
-    description: |
-      Path to write the rendered plan to instead of the `rendered-plan` output
-    required: false
-
 outputs:
   rendered-plan:
     description: |
-      Rendered plan in GitHub markdown, empty when `rendered-plan-path` is set
+      Rendered plan in GitHub markdown
     value: ${{ steps.run.outputs.rendered-plan }}
+
+  rendered-plan-path:
+    description: |
+      Path of a file in `$RUNNER_TEMP` holding the rendered plan
+    value: ${{ steps.run.outputs.rendered-plan-path }}
 
 runs:
   using: "composite"
@@ -46,7 +46,6 @@ runs:
         INPUT_PLAN_FILES: ${{ inputs.plan-files }}
         INPUT_PLAN_FILES_SEPARATOR: ${{ inputs.plan-files-separator }}
         INPUT_VERSION: ${{ inputs.version }}
-        INPUT_RENDERED_PLAN_PATH: ${{ inputs.rendered-plan-path }}
       run: |
         # TF Plan Format
         "${GITHUB_ACTION_PATH}/src/main.sh"

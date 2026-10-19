@@ -103,13 +103,6 @@ function install() {
 }
 
 function resolve_binary() {
-    # Lets the tests render with a stub or a locally built binary
-    if [[ -n "${TF_PLAN_FORMAT_ACTION_TEST_BINARY:-}" ]]; then
-        print_info "Using test binary ${TF_PLAN_FORMAT_ACTION_TEST_BINARY}"
-        BINARY="${TF_PLAN_FORMAT_ACTION_TEST_BINARY}"
-        return
-    fi
-
     resolve_platform
     local INSTALL_DIR="${RUNNER_TEMP}/tf-plan-format/${INPUT_VERSION}"
     if [[ ! -x "${INSTALL_DIR}/tf_plan_format" ]]; then
@@ -144,26 +137,22 @@ function main() {
     INPUT_PLAN_FILES=${INPUT_PLAN_FILES:?"INPUT_PLAN_FILES is not set"}
     INPUT_PLAN_FILES_SEPARATOR=${INPUT_PLAN_FILES_SEPARATOR:?"INPUT_PLAN_FILES_SEPARATOR is not set"}
     INPUT_VERSION=${INPUT_VERSION:?"INPUT_VERSION is not set"}
-    INPUT_RENDERED_PLAN_PATH=${INPUT_RENDERED_PLAN_PATH:-}
     RUNNER_TEMP=${RUNNER_TEMP:?"RUNNER_TEMP is not set"}
 
     resolve_binary
     build_cli_args
 
-    if [[ -n "${INPUT_RENDERED_PLAN_PATH}" ]]; then
-        mkdir -p "$(dirname "${INPUT_RENDERED_PLAN_PATH}")"
-        if ! "${BINARY}" "${CLI_ARGS[@]}" > "${INPUT_RENDERED_PLAN_PATH}"; then
-            fail "tf_plan_format failed to render the plans"
-        fi
-        print_info "Rendered plan written to ${INPUT_RENDERED_PLAN_PATH}"
-        return
+    local OUTPUT_DIR
+    OUTPUT_DIR=$(mktemp -d "${RUNNER_TEMP}/tf-plan-format-action.XXXXXX")
+    local RENDERED_PLAN_PATH="${OUTPUT_DIR}/rendered-plan.md"
+    if ! "${BINARY}" "${CLI_ARGS[@]}" > "${RENDERED_PLAN_PATH}"; then
+        fail "tf_plan_format failed to render the plans"
     fi
 
     local RENDERED_PLAN
-    if ! RENDERED_PLAN=$("${BINARY}" "${CLI_ARGS[@]}"); then
-        fail "tf_plan_format failed to render the plans"
-    fi
+    RENDERED_PLAN=$(cat "${RENDERED_PLAN_PATH}")
     set_output "rendered-plan" "${RENDERED_PLAN}"
+    set_output "rendered-plan-path" "${RENDERED_PLAN_PATH}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

@@ -136,13 +136,12 @@ jobs:
         uses: $/
         with:
           plan-files: tests/plans/create/opentofu.tfplan.json
-          rendered-plan-path: ${{ runner.temp }}/rendered/plan.md
 
-      - name: Read rendered plan
+      - name: Read rendered plan file
         id: read
         shell: bash
         env:
-          RENDERED_PLAN_PATH: ${{ runner.temp }}/rendered/plan.md
+          RENDERED_PLAN_PATH: ${{ steps.test-run.outputs.rendered-plan-path }}
         run: |
           DELIMITER="EOF_${RANDOM}${RANDOM}"
           {
@@ -158,11 +157,11 @@ jobs:
           expected: "create - Plan: 1 to add, 0 to change, 0 to destroy"
           comparison: contains
 
-      - name: Assert empty output
+      - name: Assert file matches output
         uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
         with:
-          actual: ${{ steps.test-run.outputs.rendered-plan }}
-          expected: ""
+          actual: ${{ steps.read.outputs.rendered-plan }}
+          expected: ${{ steps.test-run.outputs.rendered-plan }}
 
   e2e-unknown-version:
     runs-on: ubuntu-latest
