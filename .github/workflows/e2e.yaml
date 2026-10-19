@@ -28,13 +28,146 @@ jobs:
         id: test-run
         uses: $/
         with:
-          placeholder: "test_placeholder"
+          plan-files: tests/plans/create/opentofu.tfplan.json
 
-      - name: Assert placeholder
+      - name: Read expected plan
+        id: expected
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/default.md
+
+      - name: Assert rendered plan
         uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
         with:
-          actual: ${{ steps.test-run.outputs.placeholder }}
-          expected: "test_placeholder"
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: ${{ steps.expected.outputs.stdout }}
+
+  e2e-multiple-plan-files:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          plan-files: |
+            tests/plans/create/opentofu.tfplan.json
+            tests/plans/u*/opentofu.tfplan.json
+            tests/plans/outputs/opentofu.tfplan.json
+
+      - name: Read expected plan
+        id: expected
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/multiple-plan-files.md
+
+      - name: Assert rendered plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: ${{ steps.expected.outputs.stdout }}
+
+  e2e-plan-files-separator:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          plan-files: "tests/plans/create/opentofu.tfplan.json,tests/plans/update/opentofu.tfplan.json"
+          plan-files-separator: ","
+
+      - name: Read expected plan
+        id: expected
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/plan-files-separator.md
+
+      - name: Assert rendered plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: ${{ steps.expected.outputs.stdout }}
+
+  e2e-rendered-plan-path:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          plan-files: tests/plans/create/opentofu.tfplan.json
+
+      - name: Read rendered plan file
+        id: file
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat ${{ steps.test-run.outputs.rendered-plan-path }}
+
+      - name: Read expected plan
+        id: expected
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/default.md
+
+      - name: Assert rendered plan file
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.file.outputs.stdout }}
+          expected: ${{ steps.expected.outputs.stdout }}
+
+  e2e-unknown-version:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        continue-on-error: true
+        uses: $/
+        with:
+          plan-files: tests/plans/create/opentofu.tfplan.json
+          version: "0.0.0"
+
+      - name: Assert failure
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outcome }}
+          expected: "failure"
+
   e2e:
     runs-on: ubuntu-latest
     if: always() && !cancelled()
@@ -43,6 +176,10 @@ jobs:
 
     needs:
       - e2e-default
+      - e2e-multiple-plan-files
+      - e2e-plan-files-separator
+      - e2e-rendered-plan-path
+      - e2e-unknown-version
 
     steps:
       - name: Collect Results

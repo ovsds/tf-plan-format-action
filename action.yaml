@@ -1,24 +1,40 @@
 name: "TF Plan Format"
 description: |
-  TF Plan Format Action
+  Render Terraform/OpenTofu plans into GitHub markdown with tf-plan-format
 
 # https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#branding
 branding:
-  icon: "message-square"
+  icon: "file-text"
   color: "gray-dark"
 
 inputs:
-  placeholder:
+  plan-files:
     description: |
-      Placeholder input to be replaced by real inputs
+      Plan JSON paths or globs (the output of `show -json`), separated by `plan-files-separator`
     required: true
-    default: "placeholder"
+
+  plan-files-separator:
+    description: |
+      Separator to split plan files
+    required: true
+    default: "\n"
+
+  version:
+    description: |
+      tf-plan-format version, a release tag from 0.2.0 on
+    required: true
+    default: "0.2.0"
 
 outputs:
-  placeholder:
+  rendered-plan:
     description: |
-      Placeholder output to be replaced by real outputs
-    value: ${{steps.run.outputs.placeholder }}
+      Rendered plan in GitHub markdown
+    value: ${{ steps.run.outputs.rendered-plan }}
+
+  rendered-plan-path:
+    description: |
+      Path of a file in `$RUNNER_TEMP` holding the rendered plan
+    value: ${{ steps.run.outputs.rendered-plan-path }}
 
 runs:
   using: "composite"
@@ -27,7 +43,9 @@ runs:
       id: run
       shell: bash
       env:
-        INPUT_PLACEHOLDER: ${{ inputs.placeholder }}
+        INPUT_PLAN_FILES: ${{ inputs.plan-files }}
+        INPUT_PLAN_FILES_SEPARATOR: ${{ inputs.plan-files-separator }}
+        INPUT_VERSION: ${{ inputs.version }}
       run: |
         # TF Plan Format
-        ${{ github.action_path }}/src/main.sh
+        "${GITHUB_ACTION_PATH}/src/main.sh"
