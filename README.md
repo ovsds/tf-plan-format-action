@@ -5,7 +5,7 @@
 
 Renders Terraform and OpenTofu plans with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and posts them as a pull request comment, updating the same comment on every run.
 
-The action downloads the `tf_plan_format` release for the runner (Linux or macOS, X64 or ARM64), verifies its SHA-256 checksum and unpacks it into `$RUNNER_TEMP`; `latest` is the highest `X.Y.Z` version among the 10 newest stable releases that have the runner's archive and `checksums.txt` fully uploaded. It renders the plan JSON files into a markdown file in `$RUNNER_TEMP`: a hidden `<!-- tf-plan-format-action:<comment-key> -->` marker, a `## <title>` heading and the output of `tf_plan_format github`, all within `max-length` bytes. Then [create-or-update-unique-comment-action](https://github.com/ovsds/create-or-update-unique-comment-action) creates the comment, or updates the one that already has the marker.
+The action is a thin layer over the `tf_plan_format` binary. It downloads the release for the runner (Linux or macOS, X64 or ARM64), verifies its SHA-256 checksum and unpacks it into `$RUNNER_TEMP`; `latest` is the release GitHub marks as latest. It passes the inputs to `tf_plan_format github` as its flags, without checking them. The markdown file in `$RUNNER_TEMP` holds a hidden `<!-- tf-plan-format-action:<comment-key> -->` marker, a `## <title>` heading and the binary's output. Then [create-or-update-unique-comment-action](https://github.com/ovsds/create-or-update-unique-comment-action) creates the comment, or updates the one that already has the marker.
 
 ## Usage
 
@@ -73,7 +73,7 @@ The plan file and its JSON hold sensitive values in clear text, whatever the con
 
 ### Requirements
 
-The runner needs `bash`, `curl`, `tar`, `jq` and `sha256sum` or `shasum`, all preinstalled on GitHub-hosted runners. Releases of tf-plan-format exist for Linux and macOS on X64 and ARM64; other runners fail.
+The runner needs `bash`, `curl`, `tar` and `sha256sum` or `shasum`, all preinstalled on GitHub-hosted runners. Releases of tf-plan-format exist for Linux and macOS on X64 and ARM64; other runners fail.
 
 ### Action Inputs
 
@@ -90,7 +90,7 @@ inputs:
     default: "latest"
   max-length:
     description: |
-      Maximum length of the whole rendered markdown in bytes, the marker and the heading included, under GitHub's 65536-character comment limit; the plans get what the marker and the heading leave
+      tf_plan_format's --max-length: maximum length of the rendered plans in bytes; the marker and the heading add theirs, so keep it under GitHub's 65536-character comment limit with room for them
     required: true
     default: "65000"
   changed-values:
@@ -130,7 +130,7 @@ inputs:
     default: ${{ github.event.pull_request.number }}
   token:
     description: |
-      GitHub token used to resolve the latest release and to post the comment
+      GitHub token used to post the comment
     required: true
     default: ${{ github.token }}
   comment-author:

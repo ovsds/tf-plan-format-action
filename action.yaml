@@ -19,7 +19,7 @@ inputs:
     default: "latest"
   max-length:
     description: |
-      Maximum length of the whole rendered markdown in bytes, the marker and the heading included, under GitHub's 65536-character comment limit; the plans get what the marker and the heading leave
+      tf_plan_format's --max-length: maximum length of the rendered plans in bytes; the marker and the heading add theirs, so keep it under GitHub's 65536-character comment limit with room for them
     required: true
     default: "65000"
   changed-values:
@@ -59,7 +59,7 @@ inputs:
     default: ${{ github.event.pull_request.number }}
   token:
     description: |
-      GitHub token used to resolve the latest release and to post the comment
+      GitHub token used to post the comment
     required: true
     default: ${{ github.token }}
   comment-author:
@@ -92,10 +92,7 @@ runs:
         INPUT_SHOW_NO_OP: ${{ inputs.show-no-op }}
         INPUT_SHOW_READ: ${{ inputs.show-read }}
         INPUT_TITLE: ${{ inputs.title }}
-        INPUT_COMMENT: ${{ inputs.comment }}
         INPUT_COMMENT_KEY: ${{ inputs.comment-key }}
-        INPUT_ISSUE_NUMBER: ${{ inputs.issue-number }}
-        INPUT_TOKEN: ${{ inputs.token }}
       run: |
         # TF Plan Format
         "${GITHUB_ACTION_PATH}/src/main.sh"
