@@ -5,7 +5,7 @@
 
 Renders Terraform and OpenTofu plans into GitHub markdown with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and returns it, both as the `rendered-plan` output and as a file at `rendered-plan-path`.
 
-The action is a thin layer over the `tf_plan_format` binary: it downloads the `version` release for the runner (Linux or macOS, X64 or ARM64), verifies its SHA-256 checksum, unpacks it into `$RUNNER_TEMP` and runs `tf_plan_format github` with a `--file` for each of the plan files. It posts nothing: where the markdown goes is the caller's choice.
+The action is a thin layer over the `tf_plan_format` binary: it runs the `ghcr.io/ovsds/tf-plan-format:<version>` image with `github` and a `--file` for each of the plan files, mounting the working directory and `$RUNNER_TEMP` at their own paths. It posts nothing: where the markdown goes is the caller's choice.
 
 ## Usage
 
@@ -84,7 +84,7 @@ The plan file and its JSON hold sensitive values in clear text, whatever the con
 
 ### Requirements
 
-The runner needs `bash`, `curl`, `tar` and `sha256sum` or `shasum`, all preinstalled on GitHub-hosted runners. Releases of tf-plan-format exist for Linux and macOS on X64 and ARM64; other runners fail.
+The runner needs Docker, so a Linux runner: GitHub-hosted `ubuntu-*` runners have it, macOS and Windows runners do not. The image is built for amd64 and arm64. Plan files must be under the working directory or `$RUNNER_TEMP`. Jobs with a `container:` are not supported: the Docker daemon would not see the container's paths.
 
 ### Action Inputs
 
@@ -103,7 +103,7 @@ inputs:
 
   version:
     description: |
-      tf-plan-format version, a release tag like 0.1.0
+      tf-plan-format version, a tag of the ghcr.io/ovsds/tf-plan-format image like 0.1.0
     required: true
     default: "0.1.0"
 ```

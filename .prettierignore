@@ -1,0 +1,2 @@
+# Exact tf_plan_format output the e2e jobs compare against
+tests/expected/

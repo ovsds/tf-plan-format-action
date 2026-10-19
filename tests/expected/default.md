@@ -1,0 +1,16 @@
+<details>
+<summary>✅create - Plan: 1 to add, 0 to change, 0 to destroy</summary>
+<details>
+<summary>✅terraform_data.foo-bar
+</summary>
+
+```
+id: (known after apply)
+input: "foo"
+output: (known after apply)
+triggers_replace: null
+```
+
+</details>
+</details>
+
