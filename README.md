@@ -5,7 +5,7 @@
 
 Renders Terraform and OpenTofu plans into GitHub markdown with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and returns it, both as the `rendered-plan` output and as a file at `rendered-plan-path`.
 
-The action is a thin layer over the `tf_plan_format` binary: it runs the `ghcr.io/ovsds/tf-plan-format:<version>` image with `github` and a `--file` for each of the plan files, mounting the working directory and `$RUNNER_TEMP` at their own paths. It posts nothing: where the markdown goes is the caller's choice.
+The action is a thin layer over the `tf_plan_format` binary: it installs the `version` release into `$RUNNER_TEMP` with the [setup.sh](https://github.com/ovsds/tf-plan-format/blob/main/setup.sh) from that release's tag, which verifies the archive's checksum, and runs `tf_plan_format github` with a `--file` for each of the plan files. Since tf-plan-format 0.2.0, the first version the action supports, the rendered plan starts with a hidden `<!-- tf-plan-format -->` line, so a comment holding it can be found and updated. It posts nothing: where the markdown goes is the caller's choice.
 
 ## Usage
 
@@ -46,12 +46,6 @@ jobs:
         with:
           plan-files: ${{ runner.temp }}/plan.json
 
-      # The comment to update is found by this marker
-      - name: Add comment marker
-        run: sed -i '1i <!-- tf-plan-format -->' "${RENDERED_PLAN_PATH}"
-        env:
-          RENDERED_PLAN_PATH: ${{ steps.tf-plan-format.outputs.rendered-plan-path }}
-
       - name: Comment
         uses: ovsds/create-or-update-unique-comment-action@v1
         with:
@@ -84,7 +78,7 @@ The plan file and its JSON hold sensitive values in clear text, whatever the con
 
 ### Requirements
 
-The runner needs Docker, so a Linux runner: GitHub-hosted `ubuntu-*` runners have it, macOS and Windows runners do not. The image is built for amd64 and arm64. Plan files must be under the working directory or `$RUNNER_TEMP`. Jobs with a `container:` are not supported: the Docker daemon would not see the container's paths.
+The runner needs `bash`, `curl` and `tar`, preinstalled on GitHub-hosted runners. Releases of tf-plan-format exist for Linux and macOS on X64 and ARM64; the Linux builds need glibc, so musl-based containers like Alpine are not supported.
 
 ### Action Inputs
 
@@ -103,9 +97,9 @@ inputs:
 
   version:
     description: |
-      tf-plan-format version, a tag of the ghcr.io/ovsds/tf-plan-format image like 0.1.0
+      tf-plan-format version, a release tag from 0.2.0 on
     required: true
-    default: "0.1.0"
+    default: "0.2.0"
 ```
 
 ### Action Outputs

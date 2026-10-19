@@ -47,11 +47,18 @@ function main() {
     local RENDERED_PLAN_PATH
     RENDERED_PLAN_PATH="$(mktemp -d "${RUNNER_TEMP}/tf-plan-format-action.XXXXXX")/rendered-plan.md"
 
-    # Plan files are relative to the working directory or absolute, often in $RUNNER_TEMP: both are mounted as is,
-    # read-only and without network, as the plans hold sensitive values in clear text
-    if ! docker run --rm --network none \
-        --volume "${PWD}:${PWD}:ro" --volume "${RUNNER_TEMP}:${RUNNER_TEMP}:ro" --workdir "${PWD}" \
-        "ghcr.io/ovsds/tf-plan-format:${INPUT_VERSION}" "${ARGS[@]}" > "${RENDERED_PLAN_PATH}"; then
+    local INSTALL_DIR="${RUNNER_TEMP}/tf-plan-format/${INPUT_VERSION}"
+    if [[ ! -x "${INSTALL_DIR}/tf_plan_format" ]]; then
+        # The script from the release's own tag, so it matches the assets it installs
+        if ! curl --fail --silent --show-error --location --retry 3 \
+            "https://raw.githubusercontent.com/ovsds/tf-plan-format/${INPUT_VERSION}/setup.sh" |
+            bash -s -- "${INPUT_VERSION}" "${INSTALL_DIR}"; then
+            print_error "Failed to install tf-plan-format ${INPUT_VERSION}, see the error above; versions before 0.2.0 have no setup.sh"
+            exit 1
+        fi
+    fi
+
+    if ! "${INSTALL_DIR}/tf_plan_format" "${ARGS[@]}" > "${RENDERED_PLAN_PATH}"; then
         print_error "tf_plan_format failed to render the plans"
         exit 1
     fi

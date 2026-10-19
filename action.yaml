@@ -21,9 +21,9 @@ inputs:
 
   version:
     description: |
-      tf-plan-format version, a tag of the ghcr.io/ovsds/tf-plan-format image like 0.1.0
+      tf-plan-format version, a release tag from 0.2.0 on
     required: true
-    default: "0.1.0"
+    default: "0.2.0"
 
 outputs:
   rendered-plan:
