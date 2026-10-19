@@ -32,19 +32,15 @@ jobs:
 
       - name: Read expected plan
         id: expected
-        shell: bash
-        run: |
-          {
-            echo "rendered-plan<<EOF_EXPECTED"
-            cat tests/expected/default.md
-            echo "EOF_EXPECTED"
-          } >> "${GITHUB_OUTPUT}"
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/default.md
 
       - name: Assert rendered plan
         uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
         with:
           actual: ${{ steps.test-run.outputs.rendered-plan }}
-          expected: ${{ steps.expected.outputs.rendered-plan }}
+          expected: ${{ steps.expected.outputs.stdout }}
 
   e2e-multiple-plan-files:
     runs-on: ubuntu-latest
@@ -69,19 +65,15 @@ jobs:
 
       - name: Read expected plan
         id: expected
-        shell: bash
-        run: |
-          {
-            echo "rendered-plan<<EOF_EXPECTED"
-            cat tests/expected/multiple-plan-files.md
-            echo "EOF_EXPECTED"
-          } >> "${GITHUB_OUTPUT}"
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/multiple-plan-files.md
 
       - name: Assert rendered plan
         uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
         with:
           actual: ${{ steps.test-run.outputs.rendered-plan }}
-          expected: ${{ steps.expected.outputs.rendered-plan }}
+          expected: ${{ steps.expected.outputs.stdout }}
 
   e2e-plan-files-separator:
     runs-on: ubuntu-latest
@@ -104,19 +96,15 @@ jobs:
 
       - name: Read expected plan
         id: expected
-        shell: bash
-        run: |
-          {
-            echo "rendered-plan<<EOF_EXPECTED"
-            cat tests/expected/plan-files-separator.md
-            echo "EOF_EXPECTED"
-          } >> "${GITHUB_OUTPUT}"
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/plan-files-separator.md
 
       - name: Assert rendered plan
         uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
         with:
           actual: ${{ steps.test-run.outputs.rendered-plan }}
-          expected: ${{ steps.expected.outputs.rendered-plan }}
+          expected: ${{ steps.expected.outputs.stdout }}
 
   e2e-rendered-plan-path:
     runs-on: ubuntu-latest
@@ -138,31 +126,21 @@ jobs:
 
       - name: Read rendered plan file
         id: file
-        shell: bash
-        env:
-          RENDERED_PLAN_PATH: ${{ steps.test-run.outputs.rendered-plan-path }}
-        run: |
-          {
-            echo "rendered-plan<<EOF_FILE"
-            cat "${RENDERED_PLAN_PATH}"
-            echo "EOF_FILE"
-          } >> "${GITHUB_OUTPUT}"
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat ${{ steps.test-run.outputs.rendered-plan-path }}
 
       - name: Read expected plan
         id: expected
-        shell: bash
-        run: |
-          {
-            echo "rendered-plan<<EOF_EXPECTED"
-            cat tests/expected/default.md
-            echo "EOF_EXPECTED"
-          } >> "${GITHUB_OUTPUT}"
+        uses: ovsds/run-with-output-action@9bc0dcb1df5b70d1704c709f9cc0f40d260a5f40 # v1.4.0
+        with:
+          run: cat tests/expected/default.md
 
       - name: Assert rendered plan file
         uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
         with:
-          actual: ${{ steps.file.outputs.rendered-plan }}
-          expected: ${{ steps.expected.outputs.rendered-plan }}
+          actual: ${{ steps.file.outputs.stdout }}
+          expected: ${{ steps.expected.outputs.stdout }}
 
   e2e-unknown-version:
     runs-on: ubuntu-latest
