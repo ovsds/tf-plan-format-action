@@ -1,0 +1,16 @@
+name: "Setup Environment"
+description: "Setting environment for the project"
+
+inputs:
+  mise-version:
+    description: "Mise version, tools are pinned in mise.toml"
+    required: true
+    default: "2026.10.11"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup mise
+      uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+      with:
+        version: ${{ inputs.mise-version }}

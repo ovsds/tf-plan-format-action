@@ -1,0 +1,33 @@
+name: "TF Plan Format"
+description: |
+  TF Plan Format Action
+
+# https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#branding
+branding:
+  icon: "message-square"
+  color: "gray-dark"
+
+inputs:
+  placeholder:
+    description: |
+      Placeholder input to be replaced by real inputs
+    required: true
+    default: "placeholder"
+
+outputs:
+  placeholder:
+    description: |
+      Placeholder output to be replaced by real outputs
+    value: ${{steps.run.outputs.placeholder }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run
+      id: run
+      shell: bash
+      env:
+        INPUT_PLACEHOLDER: ${{ inputs.placeholder }}
+      run: |
+        # TF Plan Format
+        ${{ github.action_path }}/src/main.sh

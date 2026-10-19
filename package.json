@@ -1,0 +1,32 @@
+{
+  "private": true,
+  "name": "tf-plan-format-action",
+  "devDependencies": {
+    "@commitlint/cli": "^20.0.0",
+    "@commitlint/config-conventional": "^20.0.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^16.0.0",
+    "prettier": "^3.0.0"
+  },
+  "hooks": {
+    "pre-commit": "lint-staged",
+    "commit-msg": "commitlint"
+  },
+  "lint-staged": {
+    "*.sh": [
+      "shellcheck"
+    ],
+    "*.{md,yaml,json,js}": [
+      "prettier --check"
+    ]
+  },
+  "scripts": {
+    "lint:check": "npm run lint:check:prettier && npm run lint:check:shellcheck",
+    "lint:check:prettier": "prettier --check .",
+    "lint:check:shellcheck": "shellcheck **/*.sh --enable=all",
+    "lint:fix": "npm run lint:fix:prettier && npm run lint:fix:shellcheck",
+    "lint:fix:prettier": "prettier --write .",
+    "lint:fix:shellcheck": "shellcheck **/*.sh --enable=all",
+    "prepare": "husky"
+  }
+}

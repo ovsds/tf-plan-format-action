@@ -1,0 +1,52 @@
+name: E2E
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-default:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          placeholder: "test_placeholder"
+
+      - name: Assert placeholder
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.placeholder }}
+          expected: "test_placeholder"
+  e2e:
+    runs-on: ubuntu-latest
+    if: always() && !cancelled()
+
+    permissions: {}
+
+    needs:
+      - e2e-default
+
+    steps:
+      - name: Collect Results
+        uses: ovsds/collect-needs-result-action@12190e2a1bfe85d9c024f190a3833973e97998f8 # v1.0.0
+        with:
+          needs_json: ${{ toJson(needs) }}
+          skip_allowed: false

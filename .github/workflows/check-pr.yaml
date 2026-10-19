@@ -1,0 +1,39 @@
+name: Check PR
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-pr:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # Gitleaks scans the whole history
+
+      - name: Setup Environment
+        uses: $/.github/actions/setup_environment
+
+      - name: Install Dependencies
+        run: |
+          mise run init
+
+      - name: Lint PR
+        run: |
+          mise run lint
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Required for Zizmor
