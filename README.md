@@ -3,13 +3,15 @@
 [![CI](https://github.com/ovsds/tf-plan-format-action/workflows/Check%20PR/badge.svg)](https://github.com/ovsds/tf-plan-format-action/actions?query=workflow%3A%22%22Check+PR%22%22)
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-TF%20Plan%20Format-blue.svg)](https://github.com/marketplace/actions/tf-plan-format)
 
-Renders Terraform and OpenTofu plans with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and posts them as a pull request comment, updating the same comment on every run.
+Renders Terraform and OpenTofu plans into GitHub markdown with [tf-plan-format](https://github.com/ovsds/tf-plan-format) and returns it, as the `rendered-plan` output or a file.
 
-The action is a thin layer over the `tf_plan_format` binary. It downloads the release for the runner (Linux or macOS, X64 or ARM64), verifies its SHA-256 checksum and unpacks it into `$RUNNER_TEMP`; `latest` is the release GitHub marks as latest. It passes the inputs to `tf_plan_format github` as its flags, without checking them. The markdown file in `$RUNNER_TEMP` holds a hidden `<!-- tf-plan-format-action:<comment-key> -->` marker, a `## <title>` heading and the binary's output. Then [create-or-update-unique-comment-action](https://github.com/ovsds/create-or-update-unique-comment-action) creates the comment, or updates the one that already has the marker.
+The action is a thin layer over the `tf_plan_format` binary: it downloads the `version` release for the runner (Linux or macOS, X64 or ARM64), verifies its SHA-256 checksum, unpacks it into `$RUNNER_TEMP` and runs `tf_plan_format github` with a `--file` for each of the plan files. It posts nothing: where the markdown goes is the caller's choice.
 
 ## Usage
 
 ### Example
+
+Render the plan and keep it in one pull request comment with [create-or-update-unique-comment-action](https://github.com/ovsds/create-or-update-unique-comment-action):
 
 ```yaml
 on: pull_request
@@ -39,37 +41,44 @@ jobs:
           tofu show -json "${RUNNER_TEMP}/plan.tfplan" > "${RUNNER_TEMP}/plan.json"
 
       - name: TF Plan Format
-        id: tf-plan-format
         uses: ovsds/tf-plan-format-action@v1
         with:
-          files: ${{ runner.temp }}/plan.json
+          plan-files: ${{ runner.temp }}/plan.json
+          rendered-plan-path: ${{ runner.temp }}/plan.md
+
+      # The comment to update is found by this marker
+      - name: Add comment marker
+        run: sed -i '1i <!-- tf-plan-format -->' "${RUNNER_TEMP}/plan.md"
+
+      - name: Comment
+        uses: ovsds/create-or-update-unique-comment-action@v1
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: ${{ runner.temp }}/plan.md
+          unique-body-includes: "<!-- tf-plan-format -->"
 ```
 
-Several jobs or steps keep separate comments when each sets its own `comment-key`. With `comment: false` the action only renders, and the markdown can go elsewhere, for example to the job summary:
+Plan files are separated by newlines, or by `plan-files-separator`, and may be globs:
 
 ```yaml
 - name: TF Plan Format
   id: tf-plan-format
   uses: ovsds/tf-plan-format-action@v1
   with:
-    files: |
-      ${{ runner.temp }}/plans/*/plan.json
-    comment: false
+    plan-files: "plans/staging/plan.json,plans/production/*.json"
+    plan-files-separator: ","
 
 - name: Job summary
-  run: |
-    cat "${MARKDOWN_PATH}" >> "${GITHUB_STEP_SUMMARY}"
+  run: echo "${RENDERED_PLAN}" >> "${GITHUB_STEP_SUMMARY}"
   env:
-    MARKDOWN_PATH: ${{ steps.tf-plan-format.outputs.markdown-path }}
+    RENDERED_PLAN: ${{ steps.tf-plan-format.outputs.rendered-plan }}
 ```
 
-On pull requests from forks the default `GITHUB_TOKEN` is read-only, so the comment step fails. Set `comment: false` for them, for example `comment: ${{ github.event.pull_request.head.repo.full_name == github.repository }}`, and render elsewhere, like the job summary above from `markdown-path`. A `pull_request_target` workflow gets a writable token, but it runs with the base repository's secrets and permissions: planning code from a fork there needs great care.
-
-With a personal access token or a GitHub App token in `token`, set `comment-author` to the token's user, like `my-app[bot]` for an app: the comment to update is looked up by its author, and with the default `github-actions[bot]` every run would post a new comment.
+Large plans are better written to a file with `rendered-plan-path` than passed through the `rendered-plan` output. The rendered plan is not capped, while GitHub comments stop at 65536 characters.
 
 ### Security
 
-The plan file and its JSON hold sensitive values in clear text, whatever the configuration marks as sensitive. Write them to `$RUNNER_TEMP`, never commit them, upload them as artifacts or cache them. The rendered comment masks sensitive values, but it is public to everyone who can read the pull request: review what the plan shows before using the action on a public repository.
+The plan file and its JSON hold sensitive values in clear text, whatever the configuration marks as sensitive. Write them to `$RUNNER_TEMP`, never commit them, upload them as artifacts or cache them. The rendered markdown masks sensitive values, but wherever it is posted, everyone who can read it sees the rest of the plan: review what the plan shows before posting it on a public repository.
 
 ### Requirements
 
@@ -79,79 +88,37 @@ The runner needs `bash`, `curl`, `tar` and `sha256sum` or `shasum`, all preinsta
 
 ```yaml
 inputs:
-  files:
+  plan-files:
     description: |
-      Newline-separated plan JSON paths or globs (the output of `show -json`)
+      Plan JSON paths or globs (the output of `show -json`), separated by `plan-files-separator`
     required: true
+
+  plan-files-separator:
+    description: |
+      Separator to split plan files
+    required: true
+    default: "\n"
+
   version:
     description: |
-      tf-plan-format release tag without the v prefix, like 0.1.0, or latest
+      tf-plan-format version, a release tag like 0.1.0
     required: true
-    default: "latest"
-  max-length:
+    default: "0.1.0"
+
+  rendered-plan-path:
     description: |
-      tf_plan_format's --max-length: maximum length of the rendered plans in bytes; the marker and the heading add theirs, so keep it under GitHub's 65536-character comment limit with room for them
-    required: true
-    default: "65000"
-  changed-values:
-    description: |
-      Also list the attributes that did not change in updates and replacements
-    required: true
-    default: "false"
-  show-no-op:
-    description: |
-      Render no-op changes
-    required: true
-    default: "false"
-  show-read:
-    description: |
-      Render data source reads
-    required: true
-    default: "false"
-  title:
-    description: |
-      Heading of the rendered markdown
-    required: true
-    default: "Plan"
-  comment:
-    description: |
-      Post or update the pull request comment; false only renders the markdown
-    required: true
-    default: "true"
-  comment-key:
-    description: |
-      Key of the hidden comment marker; distinct keys keep separate comments
-    required: true
-    default: "default"
-  issue-number:
-    description: |
-      Issue or pull request number to comment on, the pull request of the event by default
+      Path to write the rendered plan to instead of the `rendered-plan` output
     required: false
-    default: ${{ github.event.pull_request.number }}
-  token:
-    description: |
-      GitHub token used to post the comment
-    required: true
-    default: ${{ github.token }}
-  comment-author:
-    description: |
-      Login of the comment author whose comment is updated; set it to the token's user when token is not the workflow's GITHUB_TOKEN
-    required: true
-    default: "github-actions[bot]"
 ```
 
 ### Action Outputs
 
 ```yaml
 outputs:
-  markdown-path:
+  rendered-plan:
     description: |
-      Path of the rendered markdown file
-    value: ${{ steps.run.outputs.markdown-path }}
-  comment-id:
-    description: |
-      ID of the created or updated comment, empty when comment is false
-    value: ${{ steps.comment.outputs.comment-id }}
+      Rendered plan in GitHub markdown, empty when `rendered-plan-path` is set
+    value: ${{ steps.run.outputs.rendered-plan }}
 ```
 
 ## Development

@@ -2,7 +2,7 @@
 
 # Tests src/main.sh with a fake curl serving a local release: real downloads are left to the e2e workflow.
 # Set TF_PLAN_FORMAT_ACTION_TEST_BINARY to a tf_plan_format binary to also render the plan fixtures with it.
-# PLATFORM, VERSION, BINARY and CLI_ARGS are assigned by the sourced src/main.sh, which shellcheck does not follow here.
+# PLATFORM, BINARY and CLI_ARGS are assigned by the sourced src/main.sh, which shellcheck does not follow here.
 # shellcheck disable=SC2154
 set -euo pipefail
 
@@ -61,21 +61,17 @@ function setup() {
     mkdir -p "${RUNNER_TEMP}"
     touch "${GITHUB_OUTPUT}"
 
-    export INPUT_FILES="plan.json"
-    export INPUT_VERSION="latest"
-    export INPUT_MAX_LENGTH="65000"
-    export INPUT_CHANGED_VALUES="false"
-    export INPUT_SHOW_NO_OP="false"
-    export INPUT_SHOW_READ="false"
-    export INPUT_TITLE="Plan"
-    export INPUT_COMMENT_KEY="default"
+    export INPUT_PLAN_FILES="plan.json"
+    export INPUT_PLAN_FILES_SEPARATOR=$'\n'
+    export INPUT_VERSION="0.1.0"
+    export INPUT_RENDERED_PLAN_PATH=""
     export RUNNER_OS="Linux"
     export RUNNER_ARCH="X64"
 }
 
 function get_output() {
     local KEY=$1
-    sed -n "/^${KEY}<<EOF_[0-9]*$/{n;p;}" "${GITHUB_OUTPUT}"
+    sed -n "/^${KEY}<<EOF_[0-9]*$/,/^EOF_[0-9]*$/{/^${KEY}<<EOF_/d;/^EOF_[0-9]*$/d;p;}" "${GITHUB_OUTPUT}"
 }
 
 function join_cli_args() {
@@ -109,11 +105,9 @@ function prepare_release() {
     echo "${SUM}  ${ASSET}" > "${DIR}/checksums.txt"
 }
 
-# Stands in for curl on PATH: .../releases/latest redirects to the tag LATEST, .../download/<version>/<name> serves
-# ${TEST_DIR}/release/<version>/<name>, anything else fails like curl --fail on a 404
+# Stands in for curl on PATH: .../releases/download/<version>/<name> serves ${TEST_DIR}/release/<version>/<name>,
+# anything else fails like curl --fail on a 404
 function write_fake_curl() {
-    local LATEST=$1
-
     mkdir -p "${TEST_DIR}/bin"
     cat > "${TEST_DIR}/bin/curl" << EOF
 #!/bin/bash
@@ -122,22 +116,19 @@ URL=""
 while [[ \$# -gt 0 ]]; do
     case "\$1" in
         --output) OUTPUT=\$2; shift ;;
-        --write-out|--retry) shift ;;
+        --retry) shift ;;
         -*) ;;
         *) URL=\$1 ;;
     esac
     shift
 done
 echo "\${URL}" >> "${TEST_DIR}/curl_urls"
-case "\${URL}" in
-    */releases/latest) printf '%s' "\${URL%/latest}/tag/${LATEST}" ;;
-    */releases/download/*)
-        FILE="${TEST_DIR}/release/\${URL#*/releases/download/}"
-        [[ -f "\${FILE}" ]] || { echo "curl: (22) 404" >&2; exit 22; }
-        cp "\${FILE}" "\${OUTPUT}"
-        ;;
-    *) echo "curl: (22) 404" >&2; exit 22 ;;
-esac
+FILE="${TEST_DIR}/release/\${URL#*/releases/download/}"
+if [[ "\${URL}" != */releases/download/* || ! -f "\${FILE}" ]]; then
+    echo "curl: (22) 404" >&2
+    exit 22
+fi
+cp "\${FILE}" "\${OUTPUT}"
 EOF
     chmod +x "${TEST_DIR}/bin/curl"
     export PATH="${TEST_DIR}/bin:${PATH}"
@@ -186,56 +177,17 @@ function test_resolve_platform_rejects_unsupported_runners() {
     assert_fails_with "Unsupported runner architecture: ARM" resolve_platform
 }
 
-function test_resolve_version_follows_latest_redirect() {
-    write_fake_curl "0.2.0"
-
-    resolve_version
-    assert_equals "0.2.0" "${VERSION}"
-}
-
-function test_resolve_version_fails_without_release_tag() {
-    mkdir -p "${TEST_DIR}/bin"
-    printf '#!/bin/bash\nprintf %%s https://github.com/ovsds/tf-plan-format/releases\n' > "${TEST_DIR}/bin/curl"
-    chmod +x "${TEST_DIR}/bin/curl"
-    export PATH="${TEST_DIR}/bin:${PATH}"
-
-    assert_fails_with "led to https://github.com/ovsds/tf-plan-format/releases, not a release tag" resolve_version
-}
-
-function test_resolve_binary_fails_on_archive_without_binary() {
-    prepare_release "0.2.0"
-    write_fake_curl "0.2.0"
-    local DIR="${TEST_DIR}/release/0.2.0"
-    local ASSET="tf_plan_format-0.2.0-linux-amd64.tar.gz"
-    tar -czf "${DIR}/${ASSET}" -C "${DIR}" checksums.txt
-    local SUM
-    SUM=$(sha256 "${DIR}/${ASSET}")
-    echo "${SUM}  ${ASSET}" > "${DIR}/checksums.txt"
-
-    assert_fails_with "Failed to unpack tf_plan_format from ${ASSET}" resolve_binary
-}
-
-function test_resolve_version_keeps_given_version() {
-    write_fake_curl "0.2.0"
-    INPUT_VERSION="0.1.0"
-
-    resolve_version
-    assert_equals "0.1.0" "${VERSION}"
-    [[ ! -e "${TEST_DIR}/curl_urls" ]] || return 1
-}
-
-function test_resolve_binary_installs_latest_release() {
-    prepare_release "0.2.0"
-    write_fake_curl "0.2.0"
+function test_resolve_binary_installs_version() {
+    prepare_release "0.1.0"
+    write_fake_curl
 
     resolve_binary
-    assert_equals "${RUNNER_TEMP}/tf-plan-format/0.2.0/tf_plan_format" "${BINARY}"
+    assert_equals "${RUNNER_TEMP}/tf-plan-format/0.1.0/tf_plan_format" "${BINARY}"
     [[ -x "${BINARY}" ]] || return 1
 }
 
 function test_resolve_binary_reuses_installed_version() {
-    write_fake_curl "0.2.0"
-    INPUT_VERSION="0.1.0"
+    write_fake_curl
     mkdir -p "${RUNNER_TEMP}/tf-plan-format/0.1.0"
     write_stub_binary "${RUNNER_TEMP}/tf-plan-format/0.1.0/tf_plan_format" 0
 
@@ -245,7 +197,7 @@ function test_resolve_binary_reuses_installed_version() {
 }
 
 function test_resolve_binary_fails_on_missing_release() {
-    write_fake_curl "0.2.0"
+    write_fake_curl
     INPUT_VERSION="9.9.9"
 
     assert_fails_with "Failed to download https://github.com/ovsds/tf-plan-format/releases/download/9.9.9/tf_plan_format-9.9.9-linux-amd64.tar.gz" \
@@ -253,68 +205,86 @@ function test_resolve_binary_fails_on_missing_release() {
 }
 
 function test_resolve_binary_rejects_checksum_mismatch() {
-    prepare_release "0.2.0"
-    write_fake_curl "0.2.0"
-    echo "tampered" >> "${TEST_DIR}/release/0.2.0/tf_plan_format-0.2.0-linux-amd64.tar.gz"
+    prepare_release "0.1.0"
+    write_fake_curl
+    echo "tampered" >> "${TEST_DIR}/release/0.1.0/tf_plan_format-0.1.0-linux-amd64.tar.gz"
 
-    assert_fails_with "Checksum mismatch for tf_plan_format-0.2.0-linux-amd64.tar.gz" resolve_binary
+    assert_fails_with "Checksum mismatch for tf_plan_format-0.1.0-linux-amd64.tar.gz" resolve_binary
 }
 
 function test_resolve_binary_rejects_missing_checksum() {
-    prepare_release "0.2.0"
-    write_fake_curl "0.2.0"
-    : > "${TEST_DIR}/release/0.2.0/checksums.txt"
+    prepare_release "0.1.0"
+    write_fake_curl
+    : > "${TEST_DIR}/release/0.1.0/checksums.txt"
 
     assert_fails_with "expected no checksums.txt entry" resolve_binary
 }
 
-function test_build_cli_args_defaults() {
-    INPUT_FILES=$'  plans/a.json  \n\n\tplans/*/plan.json\n'
+function test_resolve_binary_fails_on_archive_without_binary() {
+    prepare_release "0.1.0"
+    write_fake_curl
+    local DIR="${TEST_DIR}/release/0.1.0"
+    local ASSET="tf_plan_format-0.1.0-linux-amd64.tar.gz"
+    tar -czf "${DIR}/${ASSET}" -C "${DIR}" checksums.txt
+    local SUM
+    SUM=$(sha256 "${DIR}/${ASSET}")
+    echo "${SUM}  ${ASSET}" > "${DIR}/checksums.txt"
+
+    assert_fails_with "Failed to unpack tf_plan_format from ${ASSET}" resolve_binary
+}
+
+function test_build_cli_args_splits_by_newline() {
+    INPUT_PLAN_FILES=$'  plans/a.json  \n\n\tplans/*/plan.json\n'
 
     build_cli_args
     local ACTUAL
     ACTUAL=$(join_cli_args)
-    assert_equals "github|--file|plans/a.json|--file|plans/*/plan.json|--max-length|65000" "${ACTUAL}"
+    assert_equals "github|--file|plans/a.json|--file|plans/*/plan.json" "${ACTUAL}"
 }
 
-function test_build_cli_args_flags() {
-    INPUT_CHANGED_VALUES="true"
-    INPUT_SHOW_NO_OP="true"
-    INPUT_SHOW_READ="true"
-    INPUT_MAX_LENGTH=""
+function test_build_cli_args_splits_by_separator() {
+    INPUT_PLAN_FILES="plans/a.json, plans/b.json,,plans/*/plan.json"
+    INPUT_PLAN_FILES_SEPARATOR=","
 
     build_cli_args
     local ACTUAL
     ACTUAL=$(join_cli_args)
-    assert_equals "github|--file|plan.json|--changed-values|--show-no-op|--show-read" "${ACTUAL}"
+    assert_equals "github|--file|plans/a.json|--file|plans/b.json|--file|plans/*/plan.json" "${ACTUAL}"
 }
 
-function test_action_passes_comment_author() {
-    local ACTION
-    ACTION=$(cat "${ROOT_DIR}/action.yaml")
-    assert_contains "${ACTION}" $'  comment-author:\n'
-    assert_contains "${ACTION}" '    default: "github-actions[bot]"'
-    assert_contains "${ACTION}" "        comment-author: \${{ inputs.comment-author }}"
+function test_build_cli_args_splits_by_multi_character_separator() {
+    INPUT_PLAN_FILES="a.json::b.json"
+    INPUT_PLAN_FILES_SEPARATOR="::"
+
+    build_cli_args
+    local ACTUAL
+    ACTUAL=$(join_cli_args)
+    assert_equals "github|--file|a.json|--file|b.json" "${ACTUAL}"
 }
 
-function test_main_renders_markdown() {
+function test_main_returns_rendered_plan() {
     write_stub_binary "${TEST_DIR}/tf_plan_format" 0
     export TF_PLAN_FORMAT_ACTION_TEST_BINARY="${TEST_DIR}/tf_plan_format"
-    INPUT_TITLE="Production plan"
-    INPUT_COMMENT_KEY="prod"
+    INPUT_PLAN_FILES=$'a.json\nb.json'
 
     main
 
-    local MARKDOWN_PATH
-    MARKDOWN_PATH=$(get_output "markdown-path")
-    assert_contains "${MARKDOWN_PATH}" "${RUNNER_TEMP}/"
-    local MARKER_OUTPUT
-    MARKER_OUTPUT=$(get_output "marker")
-    assert_equals "<!-- tf-plan-format-action:prod -->" "${MARKER_OUTPUT}"
-    local MARKDOWN
-    MARKDOWN=$(cat "${MARKDOWN_PATH}")
-    assert_equals $'<!-- tf-plan-format-action:prod -->\n## Production plan\n\ngithub\n--file\nplan.json\n--max-length\n65000' \
-        "${MARKDOWN}"
+    local RENDERED_PLAN
+    RENDERED_PLAN=$(get_output "rendered-plan")
+    assert_equals $'github\n--file\na.json\n--file\nb.json' "${RENDERED_PLAN}"
+}
+
+function test_main_writes_rendered_plan_to_path() {
+    write_stub_binary "${TEST_DIR}/tf_plan_format" 0
+    export TF_PLAN_FORMAT_ACTION_TEST_BINARY="${TEST_DIR}/tf_plan_format"
+    INPUT_RENDERED_PLAN_PATH="${TEST_DIR}/out/plan.md"
+
+    main
+
+    local RENDERED_PLAN
+    RENDERED_PLAN=$(cat "${INPUT_RENDERED_PLAN_PATH}")
+    assert_equals $'github\n--file\nplan.json' "${RENDERED_PLAN}"
+    [[ ! -s "${GITHUB_OUTPUT}" ]] || return 1
 }
 
 function test_main_fails_when_cli_fails() {
@@ -330,20 +300,17 @@ function test_main_renders_fixtures_with_real_binary() {
         return 0
     fi
     export TF_PLAN_FORMAT_ACTION_TEST_BINARY="${SMOKE_BINARY}"
-    INPUT_FILES=$'tests/plans/create/opentofu.tfplan.json\ntests/plans/u*/opentofu.tfplan.json\ntests/plans/outputs/opentofu.tfplan.json'
+    INPUT_PLAN_FILES=$'tests/plans/create/opentofu.tfplan.json\ntests/plans/u*/opentofu.tfplan.json\ntests/plans/outputs/opentofu.tfplan.json'
 
     (cd "${ROOT_DIR}" && main)
 
-    local MARKDOWN_PATH
-    MARKDOWN_PATH=$(get_output "markdown-path")
-    local MARKDOWN
-    MARKDOWN=$(cat "${MARKDOWN_PATH}")
-    local PREFIX=$'<!-- tf-plan-format-action:default -->\n## Plan\n\n<details>'
-    assert_equals "${PREFIX}" "${MARKDOWN:0:${#PREFIX}}"
-    assert_contains "${MARKDOWN}" "terraform_data.foo-bar"
-    assert_contains "${MARKDOWN}" "create - Plan: 1 to add, 0 to change, 0 to destroy"
-    assert_contains "${MARKDOWN}" "update - Plan: 0 to add, 1 to change, 0 to destroy"
-    assert_contains "${MARKDOWN}" "Outputs"
+    local RENDERED_PLAN
+    RENDERED_PLAN=$(get_output "rendered-plan")
+    assert_equals "<details>" "${RENDERED_PLAN:0:9}"
+    assert_contains "${RENDERED_PLAN}" "terraform_data.foo-bar"
+    assert_contains "${RENDERED_PLAN}" "create - Plan: 1 to add, 0 to change, 0 to destroy"
+    assert_contains "${RENDERED_PLAN}" "update - Plan: 0 to add, 1 to change, 0 to destroy"
+    assert_contains "${RENDERED_PLAN}" "Outputs"
 }
 
 function main_test() {

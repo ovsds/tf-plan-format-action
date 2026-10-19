@@ -1,13 +1,11 @@
 #!/bin/bash
 
-# A thin layer between the caller and tf_plan_format: install it, pass the inputs to it as flags, put the comment
-# marker and title on top. Inputs are not validated here: tf_plan_format and the comment step report their own errors.
+# A thin layer over tf_plan_format: install the given version, render the plan files with `tf_plan_format github`.
 # Runs under macOS's /bin/bash 3.2 too: no mapfile, no associative arrays, no empty "${ARRAY[@]}" under set -u.
 # Functions return values through globals rather than $(...): bash clears set -e inside command substitutions.
 set -euo pipefail
 
 RELEASES_URL="https://github.com/ovsds/tf-plan-format/releases"
-MARKER_PREFIX="tf-plan-format-action"
 
 function print_info() {
     local MESSAGE=$1
@@ -30,9 +28,9 @@ function set_output() {
     local KEY=$1
     local VALUE=$2
 
-    # A random delimiter: a fixed one inside VALUE (from comment-key or title) would end it and inject other outputs
+    # A random delimiter: the rendered plan may hold a line equal to a fixed one
     local DELIMITER="EOF_${RANDOM}${RANDOM}${RANDOM}"
-    print_info "Setting output: ${KEY}=${VALUE}"
+    print_info "Setting output: ${KEY}"
     {
         echo "${KEY}<<${DELIMITER}"
         echo "${VALUE}"
@@ -59,24 +57,6 @@ function resolve_platform() {
     PLATFORM="${OS}-${ARCH}"
 }
 
-function resolve_version() {
-    VERSION=${INPUT_VERSION}
-    if [[ "${VERSION}" != "latest" ]]; then
-        return
-    fi
-
-    # The latest release page redirects to its tag: no API call and no token
-    local URL
-    if ! URL=$(curl --fail --silent --show-error --location --retry 3 --head --output /dev/null \
-        --write-out "%{url_effective}" "${RELEASES_URL}/latest"); then
-        fail "Failed to resolve the latest tf-plan-format release"
-    fi
-    if [[ "${URL}" != */releases/tag/* ]]; then
-        fail "Failed to resolve the latest tf-plan-format release: ${RELEASES_URL}/latest led to ${URL}, not a release tag"
-    fi
-    VERSION=${URL##*/}
-}
-
 function sha256() {
     local FILE=$1
 
@@ -91,17 +71,17 @@ function download() {
     local NAME=$1
     local DIR=$2
 
-    local URL="${RELEASES_URL}/download/${VERSION}/${NAME}"
+    local URL="${RELEASES_URL}/download/${INPUT_VERSION}/${NAME}"
     print_info "Downloading ${URL}"
     if ! curl --fail --silent --show-error --location --retry 3 --output "${DIR}/${NAME}" "${URL}"; then
-        fail "Failed to download ${URL}: a new release may still be uploading its assets, retry in a few minutes or set version"
+        fail "Failed to download ${URL}"
     fi
 }
 
 function install() {
     local INSTALL_DIR=$1
 
-    local ASSET="tf_plan_format-${VERSION}-${PLATFORM}.tar.gz"
+    local ASSET="tf_plan_format-${INPUT_VERSION}-${PLATFORM}.tar.gz"
     local DOWNLOAD_DIR
     DOWNLOAD_DIR=$(mktemp -d "${RUNNER_TEMP}/tf-plan-format-download.XXXXXX")
     download "${ASSET}" "${DOWNLOAD_DIR}"
@@ -131,71 +111,59 @@ function resolve_binary() {
     fi
 
     resolve_platform
-    resolve_version
-
-    local INSTALL_DIR="${RUNNER_TEMP}/tf-plan-format/${VERSION}"
+    local INSTALL_DIR="${RUNNER_TEMP}/tf-plan-format/${INPUT_VERSION}"
     if [[ ! -x "${INSTALL_DIR}/tf_plan_format" ]]; then
         install "${INSTALL_DIR}"
     fi
-    print_info "Using tf-plan-format ${VERSION}"
+    print_info "Using tf-plan-format ${INPUT_VERSION}"
     BINARY="${INSTALL_DIR}/tf_plan_format"
+}
+
+function add_file_arg() {
+    local FILE=$1
+
+    FILE="${FILE#"${FILE%%[![:space:]]*}"}"
+    FILE="${FILE%"${FILE##*[![:space:]]}"}"
+    if [[ -n "${FILE}" ]]; then
+        CLI_ARGS+=(--file "${FILE}")
+    fi
 }
 
 function build_cli_args() {
     CLI_ARGS=(github)
 
-    local FILE
-    while IFS= read -r FILE || [[ -n "${FILE}" ]]; do
-        FILE="${FILE#"${FILE%%[![:space:]]*}"}"
-        FILE="${FILE%"${FILE##*[![:space:]]}"}"
-        if [[ -n "${FILE}" ]]; then
-            CLI_ARGS+=(--file "${FILE}")
-        fi
-    done <<< "${INPUT_FILES}"
-
-    if [[ "${INPUT_CHANGED_VALUES}" == "true" ]]; then
-        CLI_ARGS+=(--changed-values)
-    fi
-    if [[ "${INPUT_SHOW_NO_OP}" == "true" ]]; then
-        CLI_ARGS+=(--show-no-op)
-    fi
-    if [[ "${INPUT_SHOW_READ}" == "true" ]]; then
-        CLI_ARGS+=(--show-read)
-    fi
-    if [[ -n "${INPUT_MAX_LENGTH}" ]]; then
-        CLI_ARGS+=(--max-length "${INPUT_MAX_LENGTH}")
-    fi
+    local REST="${INPUT_PLAN_FILES}"
+    while [[ "${REST}" == *"${INPUT_PLAN_FILES_SEPARATOR}"* ]]; do
+        add_file_arg "${REST%%"${INPUT_PLAN_FILES_SEPARATOR}"*}"
+        REST=${REST#*"${INPUT_PLAN_FILES_SEPARATOR}"}
+    done
+    add_file_arg "${REST}"
 }
 
 function main() {
-    INPUT_FILES=${INPUT_FILES:-}
-    INPUT_VERSION=${INPUT_VERSION:-latest}
-    INPUT_MAX_LENGTH=${INPUT_MAX_LENGTH:-}
-    INPUT_CHANGED_VALUES=${INPUT_CHANGED_VALUES:-}
-    INPUT_SHOW_NO_OP=${INPUT_SHOW_NO_OP:-}
-    INPUT_SHOW_READ=${INPUT_SHOW_READ:-}
-    INPUT_TITLE=${INPUT_TITLE:-}
-    INPUT_COMMENT_KEY=${INPUT_COMMENT_KEY:-}
+    INPUT_PLAN_FILES=${INPUT_PLAN_FILES:?"INPUT_PLAN_FILES is not set"}
+    INPUT_PLAN_FILES_SEPARATOR=${INPUT_PLAN_FILES_SEPARATOR:?"INPUT_PLAN_FILES_SEPARATOR is not set"}
+    INPUT_VERSION=${INPUT_VERSION:?"INPUT_VERSION is not set"}
+    INPUT_RENDERED_PLAN_PATH=${INPUT_RENDERED_PLAN_PATH:-}
     RUNNER_TEMP=${RUNNER_TEMP:?"RUNNER_TEMP is not set"}
 
     resolve_binary
     build_cli_args
 
-    local MARKER="<!-- ${MARKER_PREFIX}:${INPUT_COMMENT_KEY} -->"
-    local OUTPUT_DIR
-    OUTPUT_DIR=$(mktemp -d "${RUNNER_TEMP}/tf-plan-format-action.XXXXXX")
-    local MARKDOWN_PATH="${OUTPUT_DIR}/plan.md"
-    {
-        echo "${MARKER}"
-        echo "## ${INPUT_TITLE}"
-        echo
-    } > "${MARKDOWN_PATH}"
-    if ! "${BINARY}" "${CLI_ARGS[@]}" >> "${MARKDOWN_PATH}"; then
-        fail "tf_plan_format failed to render the plans"
+    if [[ -n "${INPUT_RENDERED_PLAN_PATH}" ]]; then
+        mkdir -p "$(dirname "${INPUT_RENDERED_PLAN_PATH}")"
+        if ! "${BINARY}" "${CLI_ARGS[@]}" > "${INPUT_RENDERED_PLAN_PATH}"; then
+            fail "tf_plan_format failed to render the plans"
+        fi
+        print_info "Rendered plan written to ${INPUT_RENDERED_PLAN_PATH}"
+        return
     fi
 
-    set_output "markdown-path" "${MARKDOWN_PATH}"
-    set_output "marker" "${MARKER}"
+    local RENDERED_PLAN
+    if ! RENDERED_PLAN=$("${BINARY}" "${CLI_ARGS[@]}"); then
+        fail "tf_plan_format failed to render the plans"
+    fi
+    set_output "rendered-plan" "${RENDERED_PLAN}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

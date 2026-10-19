@@ -1,82 +1,40 @@
 name: "TF Plan Format"
 description: |
-  Render Terraform/OpenTofu plans with tf-plan-format and post them as a pull request comment
+  Render Terraform/OpenTofu plans into GitHub markdown with tf-plan-format
 
 # https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#branding
 branding:
-  icon: "message-square"
+  icon: "file-text"
   color: "gray-dark"
 
 inputs:
-  files:
+  plan-files:
     description: |
-      Newline-separated plan JSON paths or globs (the output of `show -json`)
+      Plan JSON paths or globs (the output of `show -json`), separated by `plan-files-separator`
     required: true
+
+  plan-files-separator:
+    description: |
+      Separator to split plan files
+    required: true
+    default: "\n"
+
   version:
     description: |
-      tf-plan-format release tag without the v prefix, like 0.1.0, or latest
+      tf-plan-format version, a release tag like 0.1.0
     required: true
-    default: "latest"
-  max-length:
+    default: "0.1.0"
+
+  rendered-plan-path:
     description: |
-      tf_plan_format's --max-length: maximum length of the rendered plans in bytes; the marker and the heading add theirs, so keep it under GitHub's 65536-character comment limit with room for them
-    required: true
-    default: "65000"
-  changed-values:
-    description: |
-      Also list the attributes that did not change in updates and replacements
-    required: true
-    default: "false"
-  show-no-op:
-    description: |
-      Render no-op changes
-    required: true
-    default: "false"
-  show-read:
-    description: |
-      Render data source reads
-    required: true
-    default: "false"
-  title:
-    description: |
-      Heading of the rendered markdown
-    required: true
-    default: "Plan"
-  comment:
-    description: |
-      Post or update the pull request comment; false only renders the markdown
-    required: true
-    default: "true"
-  comment-key:
-    description: |
-      Key of the hidden comment marker; distinct keys keep separate comments
-    required: true
-    default: "default"
-  issue-number:
-    description: |
-      Issue or pull request number to comment on, the pull request of the event by default
+      Path to write the rendered plan to instead of the `rendered-plan` output
     required: false
-    default: ${{ github.event.pull_request.number }}
-  token:
-    description: |
-      GitHub token used to post the comment
-    required: true
-    default: ${{ github.token }}
-  comment-author:
-    description: |
-      Login of the comment author whose comment is updated; set it to the token's user when token is not the workflow's GITHUB_TOKEN
-    required: true
-    default: "github-actions[bot]"
 
 outputs:
-  markdown-path:
+  rendered-plan:
     description: |
-      Path of the rendered markdown file
-    value: ${{ steps.run.outputs.markdown-path }}
-  comment-id:
-    description: |
-      ID of the created or updated comment, empty when comment is false
-    value: ${{ steps.comment.outputs.comment-id }}
+      Rendered plan in GitHub markdown, empty when `rendered-plan-path` is set
+    value: ${{ steps.run.outputs.rendered-plan }}
 
 runs:
   using: "composite"
@@ -85,25 +43,10 @@ runs:
       id: run
       shell: bash
       env:
-        INPUT_FILES: ${{ inputs.files }}
+        INPUT_PLAN_FILES: ${{ inputs.plan-files }}
+        INPUT_PLAN_FILES_SEPARATOR: ${{ inputs.plan-files-separator }}
         INPUT_VERSION: ${{ inputs.version }}
-        INPUT_MAX_LENGTH: ${{ inputs.max-length }}
-        INPUT_CHANGED_VALUES: ${{ inputs.changed-values }}
-        INPUT_SHOW_NO_OP: ${{ inputs.show-no-op }}
-        INPUT_SHOW_READ: ${{ inputs.show-read }}
-        INPUT_TITLE: ${{ inputs.title }}
-        INPUT_COMMENT_KEY: ${{ inputs.comment-key }}
+        INPUT_RENDERED_PLAN_PATH: ${{ inputs.rendered-plan-path }}
       run: |
         # TF Plan Format
         "${GITHUB_ACTION_PATH}/src/main.sh"
-
-    - name: Comment
-      id: comment
-      if: ${{ inputs.comment == 'true' }}
-      uses: ovsds/create-or-update-unique-comment-action@df30f5f96aa71679deb9eb697c98f39ee9e26651 # v1.1.0
-      with:
-        token: ${{ inputs.token }}
-        issue-number: ${{ inputs.issue-number }}
-        comment-author: ${{ inputs.comment-author }}
-        body-path: ${{ steps.run.outputs.markdown-path }}
-        unique-body-includes: ${{ steps.run.outputs.marker }}

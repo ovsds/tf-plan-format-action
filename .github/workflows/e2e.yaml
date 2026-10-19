@@ -13,46 +13,6 @@ concurrency:
 
 jobs:
   e2e-default:
-    runs-on: ${{ matrix.runner }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        runner:
-          - ubuntu-latest
-          - ubuntu-24.04-arm
-          - macos-latest
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-
-      - name: Test Run
-        id: test-run
-        uses: $/
-        with:
-          files: tests/plans/create/opentofu.tfplan.json
-          comment: false
-
-      - name: Assert rendered markdown
-        shell: bash
-        env:
-          MARKDOWN_PATH: ${{ steps.test-run.outputs.markdown-path }}
-          COMMENT_ID: ${{ steps.test-run.outputs.comment-id }}
-        run: |
-          cat "${MARKDOWN_PATH}"
-          [[ "$(sed -n 1p "${MARKDOWN_PATH}")" == "<!-- tf-plan-format-action:default -->" ]]
-          [[ "$(sed -n 2p "${MARKDOWN_PATH}")" == "## Plan" ]]
-          grep -qF "terraform_data.foo-bar" "${MARKDOWN_PATH}"
-          grep -qF "create - Plan: 1 to add, 0 to change, 0 to destroy" "${MARKDOWN_PATH}"
-          [[ -z "${COMMENT_ID}" ]]
-
-  e2e-multiple-plans:
     runs-on: ubuntu-latest
 
     permissions:
@@ -68,29 +28,167 @@ jobs:
         id: test-run
         uses: $/
         with:
-          files: |
+          plan-files: tests/plans/create/opentofu.tfplan.json
+
+      - name: Assert plan summary
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "create - Plan: 1 to add, 0 to change, 0 to destroy"
+          comparison: contains
+
+      - name: Assert resource
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "terraform_data.foo-bar"
+          comparison: contains
+
+  e2e-multiple-plan-files:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          plan-files: |
             tests/plans/create/opentofu.tfplan.json
             tests/plans/u*/opentofu.tfplan.json
             tests/plans/outputs/opentofu.tfplan.json
-          version: "0.1.0"
-          changed-values: true
-          title: "Staging plan"
-          comment: false
-          comment-key: "staging"
 
-      - name: Assert rendered markdown
+      - name: Assert create plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "create - Plan: 1 to add, 0 to change, 0 to destroy"
+          comparison: contains
+
+      - name: Assert update plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "update - Plan: 0 to add, 1 to change, 0 to destroy"
+          comparison: contains
+
+      - name: Assert outputs plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "outputs - Plan: 0 to add, 1 to change, 0 to destroy"
+          comparison: contains
+
+  e2e-plan-files-separator:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          plan-files: "tests/plans/create/opentofu.tfplan.json,tests/plans/update/opentofu.tfplan.json"
+          plan-files-separator: ","
+
+      - name: Assert create plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "create - Plan: 1 to add, 0 to change, 0 to destroy"
+          comparison: contains
+
+      - name: Assert update plan
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: "update - Plan: 0 to add, 1 to change, 0 to destroy"
+          comparison: contains
+
+  e2e-rendered-plan-path:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        uses: $/
+        with:
+          plan-files: tests/plans/create/opentofu.tfplan.json
+          rendered-plan-path: ${{ runner.temp }}/rendered/plan.md
+
+      - name: Read rendered plan
+        id: read
         shell: bash
         env:
-          MARKDOWN_PATH: ${{ steps.test-run.outputs.markdown-path }}
+          RENDERED_PLAN_PATH: ${{ runner.temp }}/rendered/plan.md
         run: |
-          cat "${MARKDOWN_PATH}"
-          [[ "$(sed -n 1p "${MARKDOWN_PATH}")" == "<!-- tf-plan-format-action:staging -->" ]]
-          [[ "$(sed -n 2p "${MARKDOWN_PATH}")" == "## Staging plan" ]]
-          grep -qF "terraform_data.foo-bar" "${MARKDOWN_PATH}"
-          grep -qF "create - Plan: 1 to add, 0 to change, 0 to destroy" "${MARKDOWN_PATH}"
-          grep -qF "update - Plan: 0 to add, 1 to change, 0 to destroy" "${MARKDOWN_PATH}"
-          grep -qF "outputs - Plan: 0 to add, 1 to change, 0 to destroy" "${MARKDOWN_PATH}"
-          grep -qF "Outputs" "${MARKDOWN_PATH}"
+          DELIMITER="EOF_${RANDOM}${RANDOM}"
+          {
+            echo "rendered-plan<<${DELIMITER}"
+            cat "${RENDERED_PLAN_PATH}"
+            echo "${DELIMITER}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Assert rendered plan file
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.read.outputs.rendered-plan }}
+          expected: "create - Plan: 1 to add, 0 to change, 0 to destroy"
+          comparison: contains
+
+      - name: Assert empty output
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outputs.rendered-plan }}
+          expected: ""
+
+  e2e-unknown-version:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Test Run
+        id: test-run
+        continue-on-error: true
+        uses: $/
+        with:
+          plan-files: tests/plans/create/opentofu.tfplan.json
+          version: "0.0.0"
+
+      - name: Assert failure
+        uses: nick-fields/assert-action@aa0067e01f0f6545c31755d6ca128c5a3a14f6bf # v2.0.0
+        with:
+          actual: ${{ steps.test-run.outcome }}
+          expected: "failure"
 
   e2e:
     runs-on: ubuntu-latest
@@ -100,7 +198,10 @@ jobs:
 
     needs:
       - e2e-default
-      - e2e-multiple-plans
+      - e2e-multiple-plan-files
+      - e2e-plan-files-separator
+      - e2e-rendered-plan-path
+      - e2e-unknown-version
 
     steps:
       - name: Collect Results
