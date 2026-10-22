@@ -1,8 +1,9 @@
 <!-- tf-plan-format -->
 <details>
-<summary>✅create - Plan: 1 to add, 0 to change, 0 to destroy</summary>
+<summary>✅ <b>create</b> +1 ~0 −0</summary>
+<blockquote>
 <details>
-<summary>✅terraform_data.foo-bar
+<summary>✅ <code>terraform_data.foo-bar</code>
 </summary>
 
 ```
@@ -13,5 +14,6 @@ triggers_replace: null
 ```
 
 </details>
+</blockquote>
 </details>
 

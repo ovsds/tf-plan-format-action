@@ -1,8 +1,9 @@
 <!-- tf-plan-format -->
 <details>
-<summary>✅create - Plan: 1 to add, 0 to change, 0 to destroy</summary>
+<summary>✅ <b>create</b> +1 ~0 −0</summary>
+<blockquote>
 <details>
-<summary>✅terraform_data.foo-bar
+<summary>✅ <code>terraform_data.foo-bar</code>
 </summary>
 
 ```
@@ -13,11 +14,13 @@ triggers_replace: null
 ```
 
 </details>
+</blockquote>
 </details>
 <details>
-<summary>✅🔄❌outputs - Plan: 0 to add, 1 to change, 0 to destroy</summary>
+<summary>✅🔄❌ <b>outputs</b> +0 ~1 −0</summary>
+<blockquote>
 <details>
-<summary>🔄terraform_data.foo-bar
+<summary>🔄 <code>terraform_data.foo-bar</code>
 </summary>
 
 ```
@@ -27,7 +30,7 @@ output: "foo" -> (known after apply)
 
 </details>
 <details>
-<summary>✅🔄❌Outputs
+<summary>✅🔄❌ Outputs
 </summary>
 
 ```
@@ -39,11 +42,13 @@ unknown: "foo" -> (known after apply)
 ```
 
 </details>
+</blockquote>
 </details>
 <details>
-<summary>🔄update - Plan: 0 to add, 1 to change, 0 to destroy</summary>
+<summary>🔄 <b>update</b> +0 ~1 −0</summary>
+<blockquote>
 <details>
-<summary>🔄terraform_data.foo-bar
+<summary>🔄 <code>terraform_data.foo-bar</code>
 </summary>
 
 ```
@@ -52,5 +57,6 @@ output: "foo" -> (known after apply)
 ```
 
 </details>
+</blockquote>
 </details>
 
