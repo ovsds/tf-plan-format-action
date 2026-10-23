@@ -99,7 +99,7 @@ inputs:
     description: |
       tf-plan-format version, a release tag from 0.2.0 on
     required: true
-    default: "0.3.0"
+    default: "0.4.0"
 ```
 
 ### Action Outputs
